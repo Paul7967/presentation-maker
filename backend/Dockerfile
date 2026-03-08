@@ -1,4 +1,4 @@
-# backend/Dockerfile — FastAPI, uvicorn (timeout 120s, body 20 MB в app)
+# backend/Dockerfile — FastAPI, uvicorn (body 20 MB и таймаут запроса в app)
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -10,4 +10,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout", "120"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
