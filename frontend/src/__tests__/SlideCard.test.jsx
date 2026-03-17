@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import SlideCard from "../components/SlideCard";
 
 const defaultProps = {
-  slide: { title: "Test title", items: ["Item 1", "Item 2"] },
+  slide: { title: "Test title", items: ["Item 1", "Item 2"], notes: "" },
   index: 0,
   onChange: vi.fn(),
   onRemove: vi.fn(),
@@ -12,6 +12,7 @@ const defaultProps = {
   maxTitleLen: 500,
   maxItemLen: 2000,
   maxItemsPerSlide: 50,
+  maxNotesLen: 4000,
 };
 
 describe("SlideCard", () => {

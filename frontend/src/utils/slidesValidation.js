@@ -3,6 +3,7 @@ import {
   MAX_TITLE_LEN,
   MAX_ITEM_LEN,
   MAX_ITEMS_PER_SLIDE,
+  MAX_NOTES_LEN,
   MESSAGES,
 } from "../constants";
 
@@ -53,6 +54,22 @@ export function parseAndValidateSlides(jsonString) {
       }
       if (item.length > MAX_ITEM_LEN) {
         return { success: false, error: MESSAGES.ITEM_TOO_LONG(i + 1, j + 1) };
+      }
+    }
+    if (slide.layoutId !== undefined && slide.layoutId !== null) {
+      if (typeof slide.layoutId !== "number" && typeof slide.layoutId !== "string") {
+        return { success: false, error: "Некорректный формат: поле \"layoutId\" должно быть числом или строкой." };
+      }
+      if (typeof slide.layoutId === "string" && slide.layoutId.length > 200) {
+        return { success: false, error: "Превышен лимит: имя layout не более 200 символов." };
+      }
+    }
+    if (slide.notes !== undefined && slide.notes !== null) {
+      if (typeof slide.notes !== "string") {
+        return { success: false, error: "Некорректный формат: поле \"notes\" должно быть строкой." };
+      }
+      if (slide.notes.length > MAX_NOTES_LEN) {
+        return { success: false, error: MESSAGES.NOTES_TOO_LONG(i + 1) };
       }
     }
   }

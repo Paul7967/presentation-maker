@@ -6,6 +6,7 @@ import {
   MAX_TITLE_LEN,
   MAX_ITEM_LEN,
   MAX_ITEMS_PER_SLIDE,
+  MAX_NOTES_LEN,
   MAX_JSON_FILE_SIZE,
   MESSAGES,
 } from "./constants";
@@ -13,7 +14,7 @@ import { parseAndValidateSlides } from "./utils/slidesValidation";
 import SlideCard from "./components/SlideCard";
 import "./App.css";
 
-const INITIAL_SLIDE = { title: "", items: [""] };
+const INITIAL_SLIDE = { title: "", items: [""], notes: "" };
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -28,13 +29,14 @@ function SlideCardWrapper(props) {
       maxTitleLen={MAX_TITLE_LEN}
       maxItemLen={MAX_ITEM_LEN}
       maxItemsPerSlide={MAX_ITEMS_PER_SLIDE}
+      maxNotesLen={MAX_NOTES_LEN}
     />
   );
 }
 
 export default function App() {
   const [slides, setSlides] = useState([{ ...INITIAL_SLIDE }]);
-  const [inputMode, setInputMode] = useState("bySlides"); // 'bySlides' | 'byJson'
+  const [inputMode, setInputMode] = useState("byJson"); // 'bySlides' | 'byJson'
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState(null);
   const [jsonFileError, setJsonFileError] = useState(null);
@@ -48,9 +50,7 @@ export default function App() {
   const jsonFileInputRef = useRef(null);
 
   const updateSlide = useCallback((index, newSlide) => {
-    setSlides((prev) =>
-      prev.map((s, i) => (i === index ? newSlide : s))
-    );
+    setSlides((prev) => prev.map((s, i) => (i === index ? newSlide : s)));
     setFormError(null);
   }, []);
 
@@ -63,11 +63,14 @@ export default function App() {
     setFormError(null);
   }, [slides.length]);
 
-  const removeSlide = useCallback((index) => {
-    if (slides.length <= 1) return;
-    setSlides((prev) => prev.filter((_, i) => i !== index));
-    setFormError(null);
-  }, [slides.length]);
+  const removeSlide = useCallback(
+    (index) => {
+      if (slides.length <= 1) return;
+      setSlides((prev) => prev.filter((_, i) => i !== index));
+      setFormError(null);
+    },
+    [slides.length]
+  );
 
   const onFileChange = useCallback((e) => {
     const f = e.target.files?.[0];
@@ -122,6 +125,11 @@ export default function App() {
           }
         }
       }
+      const notesLen = (s.notes ?? "").length;
+      if (notesLen > MAX_NOTES_LEN) {
+        setFormError(MESSAGES.NOTES_TOO_LONG(i + 1));
+        return false;
+      }
     }
     if (!file) {
       setFormError(MESSAGES.NO_FILE);
@@ -139,24 +147,46 @@ export default function App() {
   }, [slides, file]);
 
   const slidesForApi = slides
-    .map((s) => ({
-      title: (s.title || "").trim().slice(0, MAX_TITLE_LEN),
-      items: (s.items || [])
-        .map((i) => (i || "").trim().slice(0, MAX_ITEM_LEN))
-        .filter(Boolean)
-        .slice(0, MAX_ITEMS_PER_SLIDE),
-    }))
-    .filter((s) => s.title || s.items.length > 0);
-
-  const buildSlidesForApi = useCallback((slidesArray) => {
-    return slidesArray
-      .map((s) => ({
+    .map((s) => {
+      const base = {
         title: (s.title || "").trim().slice(0, MAX_TITLE_LEN),
         items: (s.items || [])
           .map((i) => (i || "").trim().slice(0, MAX_ITEM_LEN))
           .filter(Boolean)
           .slice(0, MAX_ITEMS_PER_SLIDE),
-      }))
+        notes: (s.notes ?? "").slice(0, MAX_NOTES_LEN),
+      };
+      if (
+        s.layoutId !== undefined &&
+        s.layoutId !== null &&
+        s.layoutId !== ""
+      ) {
+        base.layoutId = s.layoutId;
+      }
+      return base;
+    })
+    .filter((s) => s.title || s.items.length > 0);
+
+  const buildSlidesForApi = useCallback((slidesArray) => {
+    return slidesArray
+      .map((s) => {
+        const base = {
+          title: (s.title || "").trim().slice(0, MAX_TITLE_LEN),
+          items: (s.items || [])
+            .map((i) => (i || "").trim().slice(0, MAX_ITEM_LEN))
+            .filter(Boolean)
+            .slice(0, MAX_ITEMS_PER_SLIDE),
+          notes: (s.notes ?? "").slice(0, MAX_NOTES_LEN),
+        };
+        if (
+          s.layoutId !== undefined &&
+          s.layoutId !== null &&
+          s.layoutId !== ""
+        ) {
+          base.layoutId = s.layoutId;
+        }
+        return base;
+      })
       .filter((s) => s.title || s.items.length > 0);
   }, []);
 
@@ -175,7 +205,16 @@ export default function App() {
       setJsonError(result.error);
       return;
     }
-    setSlides(result.data);
+    setSlides(
+      result.data.map((s) => ({
+        title: s.title,
+        items: s.items,
+        ...(s.layoutId !== undefined && s.layoutId !== null
+          ? { layoutId: s.layoutId }
+          : {}),
+        notes: s.notes ?? "",
+      }))
+    );
     setJsonError(null);
     setJsonFileError(null);
     setInputMode("bySlides");
@@ -244,12 +283,7 @@ export default function App() {
         setStatus("error");
       }
     },
-    [
-      file,
-      slidesForApi,
-      buildSlidesForApi,
-      inputMode,
-    ]
+    [file, slidesForApi, buildSlidesForApi, inputMode]
   );
 
   const retry = useCallback(() => {
@@ -323,9 +357,17 @@ export default function App() {
           setJsonFileError(result.error);
           return;
         }
-        setSlides(result.data);
+        const normalized = result.data.map((s) => ({
+          title: s.title,
+          items: s.items,
+          ...(s.layoutId !== undefined && s.layoutId !== null
+            ? { layoutId: s.layoutId }
+            : {}),
+          notes: s.notes ?? "",
+        }));
+        setSlides(normalized);
         if (inputMode === "byJson") {
-          setJsonText(JSON.stringify(result.data, null, 2));
+          setJsonText(JSON.stringify(normalized, null, 2));
         }
       };
       reader.onerror = () => setJsonFileError(MESSAGES.JSON_FILE_INVALID);
@@ -386,20 +428,20 @@ export default function App() {
           <button
             type="button"
             role="tab"
-            aria-selected={inputMode === "bySlides"}
-            className={`mode-btn ${inputMode === "bySlides" ? "active" : ""}`}
-            onClick={switchToBySlides}
-          >
-            По слайдам
-          </button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={inputMode === "byJson"}
             className={`mode-btn ${inputMode === "byJson" ? "active" : ""}`}
             onClick={switchToByJson}
           >
             Через JSON
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={inputMode === "bySlides"}
+            className={`mode-btn ${inputMode === "bySlides" ? "active" : ""}`}
+            onClick={switchToBySlides}
+          >
+            По слайдам
           </button>
         </div>
       </header>
@@ -415,7 +457,11 @@ export default function App() {
         <div className="success-box">
           <p>Презентация успешно создана</p>
           <div className="success-actions">
-            <button type="button" className="btn btn-primary" onClick={download}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={download}
+            >
               Скачать
             </button>
             <button
@@ -434,90 +480,88 @@ export default function App() {
           <div className="error-box" role="alert">
             {errorMessage}
           </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={retry}
-          >
+          <button type="button" className="btn btn-primary" onClick={retry}>
             Повторить
           </button>
         </div>
       )}
 
       {(status === "form" || status === "error") && (
-        <form
-          onSubmit={handleFormSubmit}
-          noValidate
-        >
+        <form onSubmit={handleFormSubmit} noValidate>
           {inputMode === "bySlides" && (
-          <div className="form-block">
-            <h2>Описание слайдов</h2>
-            <p id="slide-hint" className="form-hint">
-              Добавьте один и более слайдов. Максимум {MAX_SLIDES} слайдов.
-              Заголовок — до {MAX_TITLE_LEN} символов, пункт — до {MAX_ITEM_LEN}, до{" "}
-              {MAX_ITEMS_PER_SLIDE} пунктов на слайд.
-            </p>
-            {formError && (
-              <div className="error-box" role="alert">
-                {formError}
-              </div>
-            )}
-            {slides.map((slide, i) => (
-              <SlideCardWrapper
-                key={i}
-                slide={slide}
-                index={i}
-                onChange={updateSlide}
-                onRemove={removeSlide}
-                canRemove={slides.length > 1}
-              />
-            ))}
-            <button
-              type="button"
-              className="btn btn-secondary add-slide-wrap"
-              onClick={addSlide}
-              disabled={slides.length >= MAX_SLIDES}
-            >
-              Добавить слайд
-            </button>
-          </div>
+            <div className="form-block">
+              <h2>Описание слайдов</h2>
+              <p id="slide-hint" className="form-hint">
+                Добавьте один и более слайдов. Максимум {MAX_SLIDES} слайдов.
+                Заголовок — до {MAX_TITLE_LEN} символов, пункт — до{" "}
+                {MAX_ITEM_LEN}, до {MAX_ITEMS_PER_SLIDE} пунктов на слайд.
+              </p>
+              {formError && (
+                <div className="error-box" role="alert">
+                  {formError}
+                </div>
+              )}
+              {slides.map((slide, i) => (
+                <SlideCardWrapper
+                  key={i}
+                  slide={slide}
+                  index={i}
+                  onChange={updateSlide}
+                  onRemove={removeSlide}
+                  canRemove={slides.length > 1}
+                />
+              ))}
+              <button
+                type="button"
+                className="btn btn-secondary add-slide-wrap"
+                onClick={addSlide}
+                disabled={slides.length >= MAX_SLIDES}
+              >
+                Добавить слайд
+              </button>
+            </div>
           )}
 
           {inputMode === "byJson" && (
-          <div className="form-block">
-            <h2>Ввод через JSON</h2>
-            <label htmlFor="json-slides" className="visually-hidden">
-              Описание слайдов в формате JSON
-            </label>
-            <textarea
-              id="json-slides"
-              className="json-textarea"
-              value={jsonText}
-              onChange={(e) => setJsonText(e.target.value)}
-              aria-invalid={!!jsonError}
-              aria-describedby={jsonError ? "json-error" : "json-hint"}
-              placeholder='[{"title": "Заголовок", "items": ["Пункт 1"]}]'
-              rows={12}
-            />
-            <p id="json-hint" className="form-hint">
-              Формат: массив объектов с полями &quot;title&quot; и &quot;items&quot;. Максимум {MAX_SLIDES} слайдов, заголовок до {MAX_TITLE_LEN} символов, пункт до {MAX_ITEM_LEN}, до {MAX_ITEMS_PER_SLIDE} пунктов на слайд.
-            </p>
-            {jsonError && (
-              <div id="json-error" className="error-box" role="alert">
-                {jsonError}
+            <div className="form-block">
+              <h2>Ввод через JSON</h2>
+              <label htmlFor="json-slides" className="visually-hidden">
+                Описание слайдов в формате JSON
+              </label>
+              <textarea
+                id="json-slides"
+                className="json-textarea"
+                value={jsonText}
+                onChange={(e) => setJsonText(e.target.value)}
+                aria-invalid={!!jsonError}
+                aria-describedby={jsonError ? "json-error" : "json-hint"}
+                placeholder='[{"title": "Заголовок", "items": ["Пункт 1"]}]'
+                rows={12}
+              />
+              <p id="json-hint" className="form-hint">
+                Формат: массив объектов с полями &quot;title&quot;,
+                &quot;items&quot;, опционально &quot;layoutId&quot; (число или
+                строка), &quot;notes&quot; (строка, до {MAX_NOTES_LEN}{" "}
+                символов). Максимум {MAX_SLIDES} слайдов, заголовок до{" "}
+                {MAX_TITLE_LEN} символов, пункт до {MAX_ITEM_LEN}, до{" "}
+                {MAX_ITEMS_PER_SLIDE} пунктов на слайд.
+              </p>
+              {jsonError && (
+                <div id="json-error" className="error-box" role="alert">
+                  {jsonError}
+                </div>
+              )}
+              <div className="json-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={saveToJson}
+                  aria-label="Сохранить описание слайдов в файл JSON"
+                >
+                  Сохранить в JSON
+                </button>
               </div>
-            )}
-            <div className="json-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={saveToJson}
-                aria-label="Сохранить описание слайдов в файл JSON"
-              >
-                Сохранить в JSON
-              </button>
             </div>
-          </div>
           )}
 
           <div className="form-block json-drop-block">
@@ -559,7 +603,8 @@ export default function App() {
           <div className="form-block">
             <h2>Файл-образец (PPTX)</h2>
             <p className="form-hint">
-              Выберите файл .pptx до 20 MB. Стиль первого слайда будет применён ко всей презентации.
+              Выберите файл .pptx до 20 MB. Стиль первого слайда будет применён
+              ко всей презентации.
             </p>
             <div className="file-input-wrap">
               <input
@@ -587,6 +632,7 @@ export default function App() {
               type="submit"
               className="btn btn-primary"
               disabled={status === "loading" || !canSubmitForm}
+              title={!canSubmitForm ? "Не заполнены обязательные поля." : ""}
             >
               Сгенерировать
             </button>

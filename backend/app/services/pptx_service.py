@@ -17,6 +17,7 @@ MAX_TITLE_LEN = 500
 MAX_ITEM_LEN = 2000
 MAX_ITEMS_PER_SLIDE = 50
 MAX_SLIDES = 100
+MAX_NOTES_LEN = 4000
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 
 
@@ -99,11 +100,33 @@ def _set_placeholder_text(placeholder, lines: list[str], font_style: dict | None
                 r.font.color.rgb = font_style["rgb"]
 
 
+def _set_notes_text(slide, notes_text: str) -> None:
+    """Write notes text to slide's notes_slide. No-op if notes_text_frame is missing."""
+    if not notes_text or not slide:
+        return
+    text = (notes_text or "").strip()[:MAX_NOTES_LEN]
+    if not text:
+        return
+    try:
+        notes_slide = slide.notes_slide
+        tf = notes_slide.notes_text_frame
+        if tf is None:
+            return
+        tf.clear()
+        if tf.paragraphs:
+            p = tf.paragraphs[0]
+        else:
+            p = tf.add_paragraph()
+        p.text = text
+    except Exception:
+        pass
+
+
 def generate_presentation(template_bytes: bytes, slides_data: list[dict]) -> bytes:
     """
     Generate a new PPTX from template and list of slides.
-    slides_data: list of {"title": str, "items": list[str]}
-    Uses template's first slide layout; overwrites first slide and adds remaining slides.
+    slides_data: list of {"title": str, "items": list[str], "layoutId": int|str|None, "notes": str|None}
+    Uses template's first slide for slide 0; adds remaining slides with layout per layoutId (fallback: first layout).
     """
     if not slides_data or len(slides_data) > MAX_SLIDES:
         raise ValueError("invalid_slide_count")
@@ -111,12 +134,24 @@ def generate_presentation(template_bytes: bytes, slides_data: list[dict]) -> byt
     prs = Presentation(stream)
     if not prs.slides:
         raise ValueError("no_slides")
+    layouts = prs.slide_layouts
     first_slide = prs.slides[0]
-    layout = first_slide.slide_layout
     title_ph = _get_placeholder(first_slide, TITLE_PLACEHOLDER_IDX)
     body_ph = _get_placeholder(first_slide, BODY_PLACEHOLDER_IDX)
     title_style = _font_info(title_ph) if title_ph else None
     body_style = _font_info(body_ph) if body_ph else None
+
+    def get_layout(layout_id: int | str | None):
+        if layout_id is None:
+            return layouts[0]
+        if isinstance(layout_id, int):
+            if 0 <= layout_id < len(layouts):
+                return layouts[layout_id]
+            return layouts[0]
+        if isinstance(layout_id, str):
+            layout = layouts.get_by_name(layout_id, None)
+            return layout if layout is not None else layouts[0]
+        return layouts[0]
 
     def fill_slide(slide, slide_spec: dict):
         title_ph = _get_placeholder(slide, TITLE_PLACEHOLDER_IDX)
@@ -127,13 +162,15 @@ def generate_presentation(template_bytes: bytes, slides_data: list[dict]) -> byt
             _set_placeholder_text(title_ph, [title_text], title_style)
         if body_ph:
             _set_placeholder_text(body_ph, items, body_style)
+        _set_notes_text(slide, slide_spec.get("notes"))
 
-    # First slide: overwrite
+    # First slide: overwrite content and notes (keep template layout)
     fill_slide(prs.slides[0], slides_data[0])
 
-    # Add remaining slides
+    # Add remaining slides with chosen layout
     for slide_spec in slides_data[1:]:
-        new_slide = prs.slides.add_slide(layout)
+        chosen_layout = get_layout(slide_spec.get("layoutId"))
+        new_slide = prs.slides.add_slide(chosen_layout)
         fill_slide(new_slide, slide_spec)
 
     out = io.BytesIO()

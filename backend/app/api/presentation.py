@@ -12,6 +12,7 @@ from app.services.pptx_service import (
     MAX_FILE_SIZE,
     MAX_ITEMS_PER_SLIDE,
     MAX_ITEM_LEN,
+    MAX_NOTES_LEN,
     MAX_SLIDES,
     MAX_TITLE_LEN,
     generate_presentation,
@@ -47,7 +48,7 @@ def _is_pptx_signature(content: bytes) -> bool:
 
 
 def _validate_slides(slides_raw: list) -> list[dict]:
-    """Validate and normalize slides array. Returns list of {title, items}. Raises ValueError with message."""
+    """Validate and normalize slides array. Returns list of {title, items, layoutId?, notes?}. Raises ValueError with message."""
     if not slides_raw:
         raise ValueError("Введите описание хотя бы одного слайда.")
     if len(slides_raw) > MAX_SLIDES:
@@ -83,7 +84,34 @@ def _validate_slides(slides_raw: list) -> list[dict]:
                     f"Превышен лимит: пункт не более {MAX_ITEM_LEN} символов (слайд {i + 1}, пункт {j + 1})."
                 )
             out_items.append(it)
-        out.append({"title": title, "items": out_items})
+
+        layout_id = s.get("layoutId")
+        if layout_id is not None and not isinstance(layout_id, (int, str)):
+            raise ValueError(
+                "Некорректный формат: поле \"layoutId\" должно быть числом или строкой."
+            )
+        if isinstance(layout_id, str) and len(layout_id) > 200:
+            raise ValueError(
+                "Превышен лимит: имя layout не более 200 символов."
+            )
+
+        notes = s.get("notes")
+        if notes is None:
+            notes = ""
+        if not isinstance(notes, str):
+            raise ValueError(
+                "Некорректный формат: поле \"notes\" должно быть строкой."
+            )
+        if len(notes) > MAX_NOTES_LEN:
+            raise ValueError(
+                f"Превышен лимит: заметки слайда {i + 1} — не более {MAX_NOTES_LEN} символов."
+            )
+
+        row = {"title": title, "items": out_items}
+        if layout_id is not None:
+            row["layoutId"] = layout_id
+        row["notes"] = notes
+        out.append(row)
     return out
 
 

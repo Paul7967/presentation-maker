@@ -6,6 +6,7 @@ import {
   MAX_TITLE_LEN,
   MAX_ITEM_LEN,
   MAX_ITEMS_PER_SLIDE,
+  MAX_NOTES_LEN,
 } from "../constants";
 
 const validSlides = [
@@ -288,6 +289,70 @@ describe("parseAndValidateSlides", () => {
       const result = parseAndValidateSlides(JSON.stringify(slides));
       expect(result.success).toBe(false);
       expect(result.error).toBe(MESSAGES.TOO_MANY_ITEMS(2));
+    });
+  });
+
+  describe("layoutId и notes (опциональные поля)", () => {
+    it("принимает слайд с layoutId (число) и notes", () => {
+      const slides = [
+        { title: "T", items: [], layoutId: 0, notes: "Speaker note" },
+      ];
+      const result = parseAndValidateSlides(JSON.stringify(slides));
+      expect(result.success).toBe(true);
+      expect(result.data[0].layoutId).toBe(0);
+      expect(result.data[0].notes).toBe("Speaker note");
+    });
+
+    it("принимает слайд с layoutId (строка) и пустыми notes", () => {
+      const slides = [
+        { title: "T", items: [], layoutId: "Title and Content", notes: "" },
+      ];
+      const result = parseAndValidateSlides(JSON.stringify(slides));
+      expect(result.success).toBe(true);
+      expect(result.data[0].layoutId).toBe("Title and Content");
+      expect(result.data[0].notes).toBe("");
+    });
+
+    it("принимает заметки длиной ровно MAX_NOTES_LEN", () => {
+      const notes = "n".repeat(MAX_NOTES_LEN);
+      const slides = [{ title: "T", items: [], notes }];
+      const result = parseAndValidateSlides(JSON.stringify(slides));
+      expect(result.success).toBe(true);
+      expect(result.data[0].notes).toHaveLength(MAX_NOTES_LEN);
+    });
+
+    it("layoutId не число и не строка — ошибка", () => {
+      const result = parseAndValidateSlides(
+        '[{"title":"T","items":[],"layoutId":[]}]'
+      );
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("layoutId");
+    });
+
+    it("layoutId строка длиннее 200 символов — ошибка", () => {
+      const slides = [
+        { title: "T", items: [], layoutId: "x".repeat(201) },
+      ];
+      const result = parseAndValidateSlides(JSON.stringify(slides));
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/layout|200/);
+    });
+
+    it("notes не строка — ошибка", () => {
+      const result = parseAndValidateSlides(
+        '[{"title":"T","items":[],"notes":123}]'
+      );
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("notes");
+    });
+
+    it("notes длиннее MAX_NOTES_LEN — ошибка", () => {
+      const slides = [
+        { title: "T", items: [], notes: "x".repeat(MAX_NOTES_LEN + 1) },
+      ];
+      const result = parseAndValidateSlides(JSON.stringify(slides));
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(MESSAGES.NOTES_TOO_LONG(1));
     });
   });
 });

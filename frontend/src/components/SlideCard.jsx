@@ -1,10 +1,24 @@
 /**
- * Card for editing one slide: title and items list.
- * Enforces MAX_TITLE_LEN, MAX_ITEM_LEN, MAX_ITEMS_PER_SLIDE via validation props.
+ * Card for editing one slide: title, items list, layoutId, notes.
+ * Enforces MAX_TITLE_LEN, MAX_ITEM_LEN, MAX_ITEMS_PER_SLIDE, MAX_NOTES_LEN via validation props.
  */
-function SlideCard({ slide, index, onChange, onRemove, canRemove, maxTitleLen, maxItemLen, maxItemsPerSlide }) {
+function SlideCard({ slide, index, onChange, onRemove, canRemove, maxTitleLen, maxItemLen, maxItemsPerSlide, maxNotesLen }) {
   const setTitle = (v) => onChange(index, { ...slide, title: v });
   const setItems = (items) => onChange(index, { ...slide, items });
+  const setLayoutId = (v) => {
+    const raw = v.trim();
+    if (raw === "") {
+      onChange(index, { ...slide, layoutId: undefined });
+      return;
+    }
+    const num = Number(raw);
+    if (!Number.isNaN(num) && String(num) === raw) {
+      onChange(index, { ...slide, layoutId: num });
+    } else {
+      onChange(index, { ...slide, layoutId: raw });
+    }
+  };
+  const setNotes = (v) => onChange(index, { ...slide, notes: v ?? "" });
   const addItem = () => {
     if (slide.items.length >= maxItemsPerSlide) return;
     setItems([...slide.items, ""]);
@@ -12,6 +26,11 @@ function SlideCard({ slide, index, onChange, onRemove, canRemove, maxTitleLen, m
   const removeItem = (i) => setItems(slide.items.filter((_, j) => j !== i));
   const setItem = (i, val) =>
     setItems(slide.items.map((it, j) => (j === i ? val : it)));
+
+  const layoutIdDisplay = slide.layoutId !== undefined && slide.layoutId !== null && slide.layoutId !== ""
+    ? String(slide.layoutId)
+    : "";
+  const notesValue = slide.notes ?? "";
 
   return (
     <div className="slide-card">
@@ -77,6 +96,37 @@ function SlideCard({ slide, index, onChange, onRemove, canRemove, maxTitleLen, m
         >
           Добавить пункт
         </button>
+      </div>
+      <div className="form-group">
+        <label htmlFor={`slide-layout-${index}`}>Тип шаблона (layoutId)</label>
+        <input
+          id={`slide-layout-${index}`}
+          type="text"
+          value={layoutIdDisplay}
+          onChange={(e) => setLayoutId(e.target.value)}
+          placeholder="Индекс (0, 1, …) или имя layout. Пусто — первый шаблон"
+          aria-describedby={`slide-layout-hint-${index}`}
+        />
+        <span id={`slide-layout-hint-${index}`} className="form-hint-inline">
+          Индекс или имя layout из образца. Оставьте пустым для первого шаблона.
+        </span>
+      </div>
+      <div className="form-group">
+        <label htmlFor={`slide-notes-${index}`}>Заметки докладчика</label>
+        <textarea
+          id={`slide-notes-${index}`}
+          value={notesValue}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Заметки докладчика для этого слайда (необязательно)"
+          maxLength={maxNotesLen}
+          rows={3}
+          aria-describedby={`slide-notes-hint-${index}`}
+        />
+        {maxNotesLen && (
+          <span id={`slide-notes-hint-${index}`} className="char-hint" aria-live="polite">
+            {notesValue.length}/{maxNotesLen}
+          </span>
+        )}
       </div>
     </div>
   );

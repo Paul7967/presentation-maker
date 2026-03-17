@@ -6,6 +6,7 @@ from app.api.presentation import _validate_slides
 from app.services.pptx_service import (
     MAX_ITEM_LEN,
     MAX_ITEMS_PER_SLIDE,
+    MAX_NOTES_LEN,
     MAX_SLIDES,
     MAX_TITLE_LEN,
 )
@@ -26,19 +27,19 @@ class TestValidateSlides:
             _validate_slides(slides)
 
     def test_valid_single_slide(self):
-        """Valid single slide returns normalized list."""
+        """Valid single slide returns normalized list with notes."""
         out = _validate_slides([{"title": "Hi", "items": ["A", "B"]}])
-        assert out == [{"title": "Hi", "items": ["A", "B"]}]
+        assert out == [{"title": "Hi", "items": ["A", "B"], "notes": ""}]
 
     def test_missing_title_defaults_to_empty(self):
         """Missing 'title' key defaults to empty string."""
         out = _validate_slides([{"items": ["x"]}])
-        assert out == [{"title": "", "items": ["x"]}]
+        assert out == [{"title": "", "items": ["x"], "notes": ""}]
 
     def test_missing_items_defaults_to_empty_list(self):
         """Missing 'items' key defaults to []."""
         out = _validate_slides([{"title": "T"}])
-        assert out == [{"title": "T", "items": []}]
+        assert out == [{"title": "T", "items": [], "notes": ""}]
 
     def test_title_too_long_raises(self):
         """Title longer than MAX_TITLE_LEN raises."""
@@ -101,3 +102,47 @@ class TestValidateSlides:
         items = ["x"] * MAX_ITEMS_PER_SLIDE
         out = _validate_slides([{"title": "", "items": items}])
         assert len(out[0]["items"]) == MAX_ITEMS_PER_SLIDE
+        assert out[0]["notes"] == ""
+
+    def test_layout_id_int_accepted(self):
+        """layoutId as int is accepted and passed through."""
+        out = _validate_slides([{"title": "", "items": [], "layoutId": 1}])
+        assert out[0]["layoutId"] == 1
+        assert out[0]["notes"] == ""
+
+    def test_layout_id_str_accepted(self):
+        """layoutId as string is accepted and passed through."""
+        out = _validate_slides([{"title": "", "items": [], "layoutId": "Title and Content"}])
+        assert out[0]["layoutId"] == "Title and Content"
+        assert out[0]["notes"] == ""
+
+    def test_layout_id_invalid_type_raises(self):
+        """layoutId that is not int or str raises."""
+        with pytest.raises(ValueError, match="layoutId"):
+            _validate_slides([{"title": "", "items": [], "layoutId": []}])
+
+    def test_layout_id_str_too_long_raises(self):
+        """layoutId string longer than 200 raises."""
+        with pytest.raises(ValueError, match="имя layout"):
+            _validate_slides([{"title": "", "items": [], "layoutId": "x" * 201}])
+
+    def test_notes_accepted(self):
+        """notes as string is accepted and passed through."""
+        out = _validate_slides([{"title": "", "items": [], "notes": "Speaker note"}])
+        assert out[0]["notes"] == "Speaker note"
+
+    def test_notes_missing_defaults_to_empty(self):
+        """Missing notes defaults to empty string."""
+        out = _validate_slides([{"title": "T", "items": []}])
+        assert out[0]["notes"] == ""
+
+    def test_notes_too_long_raises(self):
+        """notes longer than MAX_NOTES_LEN raises."""
+        long_notes = "n" * (MAX_NOTES_LEN + 1)
+        with pytest.raises(ValueError, match="заметки слайда 1"):
+            _validate_slides([{"title": "", "items": [], "notes": long_notes}])
+
+    def test_notes_not_string_raises(self):
+        """notes that is not a string raises."""
+        with pytest.raises(ValueError, match="notes"):
+            _validate_slides([{"title": "", "items": [], "notes": 123}])
