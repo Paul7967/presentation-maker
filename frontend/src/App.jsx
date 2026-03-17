@@ -530,9 +530,12 @@ export default function App() {
               </label>
               <textarea
                 id="json-slides"
-                className="json-textarea"
+                className={`json-textarea ${isDraggingJson ? "drag-over" : ""}`}
                 value={jsonText}
                 onChange={(e) => setJsonText(e.target.value)}
+                onDrop={handleJsonDrop}
+                onDragOver={handleJsonDragOver}
+                onDragLeave={handleJsonDragLeave}
                 aria-invalid={!!jsonError}
                 aria-describedby={jsonError ? "json-error" : "json-hint"}
                 placeholder='[{"title": "Заголовок", "items": ["Пункт 1"]}]'
@@ -560,45 +563,30 @@ export default function App() {
                 >
                   Сохранить в JSON
                 </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => jsonFileInputRef.current?.click()}
+                  aria-label="Загрузить описание слайдов из файла JSON"
+                >
+                  Загрузить JSON
+                </button>
+                <input
+                  ref={jsonFileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleJsonFileInput}
+                  className="visually-hidden"
+                  aria-hidden="true"
+                />
               </div>
+              {jsonFileError && (
+                <div id="json-file-error" className="error-box" role="alert">
+                  {jsonFileError}
+                </div>
+              )}
             </div>
           )}
-
-          <div className="form-block json-drop-block">
-            <h2>Загрузить из JSON</h2>
-            <div
-              className={`json-drop-zone ${isDraggingJson ? "drag-over" : ""}`}
-              onDrop={handleJsonDrop}
-              onDragOver={handleJsonDragOver}
-              onDragLeave={handleJsonDragLeave}
-              role="button"
-              tabIndex={0}
-              onClick={() => jsonFileInputRef.current?.click()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  jsonFileInputRef.current?.click();
-                }
-              }}
-              aria-label="Загрузить описание слайдов из файла JSON"
-              aria-describedby={jsonFileError ? "json-file-error" : undefined}
-            >
-              <input
-                ref={jsonFileInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleJsonFileInput}
-                className="visually-hidden"
-                aria-hidden="true"
-              />
-              Перетащите файл .json сюда или нажмите для выбора
-            </div>
-            {jsonFileError && (
-              <div id="json-file-error" className="error-box" role="alert">
-                {jsonFileError}
-              </div>
-            )}
-          </div>
 
           <div className="form-block">
             <h2>Файл-образец (PPTX)</h2>

@@ -307,40 +307,16 @@
 }
 
 .json-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
   margin-top: 16px;
 }
 
-.json-drop-block {
-  margin-top: 24px;
-}
-
-.json-drop-zone {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 80px;
-  padding: 24px 32px;
-  border: 2px dashed var(--border);
-  border-radius: var(--radius-card);
-  background: var(--bg-main);
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-
-.json-drop-zone:hover,
-.json-drop-zone.drag-over {
+.json-textarea.drag-over {
   border-color: var(--accent);
   background: #eff6ff;
-  color: var(--text-main);
-}
-
-.json-drop-zone:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .visually-hidden {
