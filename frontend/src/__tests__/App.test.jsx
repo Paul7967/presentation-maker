@@ -6,7 +6,7 @@ import App from "../App";
 // Mock fetch for submit
 const mockFetch = vi.fn();
 beforeEach(() => {
-  global.fetch = mockFetch;
+  globalThis.fetch = mockFetch;
   mockFetch.mockReset();
 });
 
@@ -42,7 +42,7 @@ describe("App – форма слайдов", () => {
   it("валидация: файл не .pptx — показывается ошибка и файл не принимается", async () => {
     render(<App />);
     const file = new File(["x"], "document.txt", { type: "text/plain" });
-    const fileInput = document.querySelector('input[type="file"]');
+    const fileInput = document.querySelector('input[accept=".pptx"]');
     fireEvent.change(fileInput, { target: { files: [file] } });
     await waitFor(() => {
       expect(screen.getByText(/только формат PPTX/i)).toBeInTheDocument();
@@ -54,7 +54,7 @@ describe("App – форма слайдов", () => {
     render(<App />);
     await user.type(screen.getByLabelText(/заголовок/i), "Slide 1");
     const file = new File(["y"], "template.pptx", { type: "application/octet-stream" });
-    await user.upload(document.querySelector('input[type="file"]'), file);
+    await user.upload(document.querySelector('input[accept=".pptx"]'), file);
     expect(screen.getByRole("button", { name: /сгенерировать/i })).not.toBeDisabled();
   });
 
@@ -76,7 +76,7 @@ describe("App – состояния", () => {
     const titleInput = screen.getByLabelText(/заголовок/i);
     await user.type(titleInput, "T");
     const file = new File(["b"], "p.pptx", { type: "application/octet-stream" });
-    const fileInput = document.querySelector('input[type="file"]');
+    const fileInput = document.querySelector('input[accept=".pptx"]');
     await user.upload(fileInput, file);
     mockFetch.mockImplementation(() => new Promise(() => {}));
     await user.click(screen.getByRole("button", { name: /сгенерировать/i }));
@@ -90,7 +90,7 @@ describe("App – состояния", () => {
     const titleInput = screen.getByLabelText(/заголовок/i);
     await user.type(titleInput, "T");
     const file = new File(["b"], "p.pptx", { type: "application/octet-stream" });
-    const fileInput = document.querySelector('input[type="file"]');
+    const fileInput = document.querySelector('input[accept=".pptx"]');
     await user.upload(fileInput, file);
     const blob = new Blob(["pk"], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
     mockFetch.mockResolvedValueOnce({ ok: true, blob: () => Promise.resolve(blob) });
@@ -106,12 +106,111 @@ describe("App – состояния", () => {
     const titleInput = screen.getByLabelText(/заголовок/i);
     await user.type(titleInput, "T");
     const file = new File(["c"], "e.pptx", { type: "application/octet-stream" });
-    const fileInput = document.querySelector('input[type="file"]');
+    const fileInput = document.querySelector('input[accept=".pptx"]');
     await user.upload(fileInput, file);
     mockFetch.mockResolvedValueOnce({ ok: false, json: async () => ({ detail: "Ошибка сервера" }) });
     await user.click(screen.getByRole("button", { name: /сгенерировать/i }));
     await screen.findByRole("alert");
     expect(screen.getByRole("alert")).toHaveTextContent("Ошибка сервера");
     expect(screen.getByRole("button", { name: /повторить/i })).toBeInTheDocument();
+  });
+});
+
+describe("App – режим JSON", () => {
+  it("переключатель режимов: кнопки «По слайдам» и «Через JSON» в хедере", () => {
+    render(<App />);
+    expect(screen.getByRole("tab", { name: /по слайдам/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /через json/i })).toBeInTheDocument();
+  });
+
+  it("при переключении в «Через JSON» в поле подставляется JSON из текущих слайдов", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const titleInput = screen.getByLabelText(/заголовок/i);
+    await user.type(titleInput, "Мой слайд");
+    await user.click(screen.getByRole("tab", { name: /через json/i }));
+    const textarea = screen.getByRole("textbox", { name: /описание слайдов в формате json/i });
+    expect(textarea).toBeInTheDocument();
+    expect(textarea.value).toContain("Мой слайд");
+    expect(textarea.value).toMatch(/"title"\s*:\s*"Мой слайд"/);
+  });
+
+  it("при переключении в «По слайдам» с валидным JSON обновляются слайды", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("tab", { name: /через json/i }));
+    const textarea = screen.getByRole("textbox", { name: /описание слайдов в формате json/i });
+    const validJson = '[{"title":"Из JSON","items":["Пункт A","Пункт B"]}]';
+    fireEvent.change(textarea, { target: { value: validJson } });
+    await user.click(screen.getByRole("tab", { name: /по слайдам/i }));
+    expect(screen.getByLabelText(/заголовок/i)).toHaveValue("Из JSON");
+    expect(screen.getByPlaceholderText(/пункт 1/i)).toHaveValue("Пункт A");
+    expect(screen.getByPlaceholderText(/пункт 2/i)).toHaveValue("Пункт B");
+  });
+
+  it("при переключении в «По слайдам» с невалидным JSON показывается ошибка", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("tab", { name: /через json/i }));
+    const textarea = screen.getByRole("textbox", { name: /описание слайдов в формате json/i });
+    fireEvent.change(textarea, { target: { value: "{ invalid }" } });
+    await user.click(screen.getByRole("tab", { name: /по слайдам/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/некорректный json/i);
+  });
+
+  it("кнопка «Сохранить в JSON» создаёт blob с содержимым слайдов", async () => {
+    const user = userEvent.setup();
+    let capturedBlob = null;
+    const createObjectURL = vi.fn((blob) => {
+      capturedBlob = blob;
+      return "blob:mock-url";
+    });
+    const revokeObjectURL = vi.fn();
+    globalThis.URL.createObjectURL = createObjectURL;
+    globalThis.URL.revokeObjectURL = revokeObjectURL;
+
+    render(<App />);
+    await user.type(screen.getByLabelText(/заголовок/i), "Экспорт");
+    await user.click(screen.getByRole("tab", { name: /через json/i }));
+    await user.click(screen.getByRole("button", { name: /сохранить описание слайдов в файл json/i }));
+
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(capturedBlob).toBeInstanceOf(Blob);
+    expect(capturedBlob.type).toBe("application/json");
+    expect(capturedBlob.size).toBeGreaterThan(0);
+    // В jsdom Blob не реализует .text()/.arrayBuffer(), проверяем содержимое через то, что передано в createObjectURL
+    const firstArg = createObjectURL.mock.calls[0][0];
+    expect(firstArg).toBe(capturedBlob);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+
+    globalThis.URL.createObjectURL = undefined;
+    globalThis.URL.revokeObjectURL = undefined;
+  });
+
+  it("в режиме JSON отображаются textarea, подсказка и кнопки действий", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("tab", { name: /через json/i }));
+    expect(screen.getByRole("textbox", { name: /описание слайдов в формате json/i })).toBeInTheDocument();
+    expect(screen.getByText(/формат: массив объектов/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /сохранить описание слайдов в файл json/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /загрузить описание слайдов из файла json/i })).toBeInTheDocument();
+  });
+
+  it("drag&drop JSON на textarea обновляет содержимое поля", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("tab", { name: /через json/i }));
+
+    const textarea = screen.getByRole("textbox", { name: /описание слайдов в формате json/i });
+    const droppedJson = '[{"title":"Из DnD","items":["Пункт 1"]}]';
+    const file = new File([droppedJson], "slides.json", { type: "application/json" });
+
+    fireEvent.dragOver(textarea, { dataTransfer: { files: [file], dropEffect: "copy" } });
+    fireEvent.drop(textarea, { dataTransfer: { files: [file] } });
+
+    await waitFor(() => {
+      expect(textarea.value).toContain("Из DnD");
+    });
   });
 });

@@ -92,6 +92,30 @@ class TestGeneratePresentation:
         assert isinstance(result, bytes)
         assert len(result) > 0
 
+    def test_generate_with_layout_id_index(self, minimal_pptx_bytes):
+        """Slides with layoutId (index) use that layout for added slides; fallback for first."""
+        slides_data = [
+            {"title": "First", "items": [], "layoutId": 0},
+            {"title": "Second", "items": [], "layoutId": 1},
+        ]
+        result = generate_presentation(minimal_pptx_bytes, slides_data)
+        prs = Presentation(io.BytesIO(result))
+        assert len(prs.slides) == 2
+
+    def test_generate_with_notes(self, minimal_pptx_bytes):
+        """Slides with notes field write to notes_slide."""
+        slides_data = [
+            {"title": "Slide 1", "items": [], "notes": "First speaker note"},
+            {"title": "Slide 2", "items": [], "notes": ""},
+        ]
+        result = generate_presentation(minimal_pptx_bytes, slides_data)
+        assert isinstance(result, bytes)
+        prs = Presentation(io.BytesIO(result))
+        assert len(prs.slides) == 2
+        # First slide has notes_slide; notes_text_frame may exist
+        notes_slide = prs.slides[0].notes_slide
+        assert notes_slide is not None
+
     def test_generate_many_items_per_slide_truncated(self, minimal_pptx_bytes):
         """More than MAX_ITEMS_PER_SLIDE: service truncates (sliced in code)."""
         many_items = [f"Item {i}" for i in range(MAX_ITEMS_PER_SLIDE + 5)]

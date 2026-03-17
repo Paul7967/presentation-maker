@@ -1,0 +1,4 @@
+необходимо доработать функционал фронта 
+- чтобы полем для Drag And Drop для загрузки файла json стало textarea id='json-slides'
+- добавить кнопку "Загрузить JSON" правее кнопки "Сохранить в JSON"
+- убрать блок div.form-block json-drop-block

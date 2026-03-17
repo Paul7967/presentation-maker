@@ -6,6 +6,8 @@ export const MAX_SLIDES = 100;
 export const MAX_TITLE_LEN = 500;
 export const MAX_ITEM_LEN = 2000;
 export const MAX_ITEMS_PER_SLIDE = 50;
+export const MAX_NOTES_LEN = 4000;
+export const MAX_JSON_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
 
 export const MESSAGES = {
   NO_SLIDES: "Введите описание хотя бы одного слайда.",
@@ -19,4 +21,11 @@ export const MESSAGES = {
     `Превышен лимит: пункт не более ${MAX_ITEM_LEN} символов (слайд ${slideNum}, пункт ${itemNum}).`,
   TOO_MANY_ITEMS: (num) =>
     `Превышен лимит: не более ${MAX_ITEMS_PER_SLIDE} пунктов на слайд (слайд ${num}).`,
+  NOTES_TOO_LONG: (num) =>
+    `Превышен лимит: заметки слайда ${num} — не более ${MAX_NOTES_LEN} символов.`,
+  /* JSON mode */
+  INVALID_JSON: "Некорректный JSON.",
+  INVALID_SLIDES_FORMAT: "Некорректный формат описания слайдов.",
+  JSON_FILE_TOO_BIG: "Файл слишком большой (максимум 2 MB).",
+  JSON_FILE_INVALID: "Файл не является корректным JSON.",
 };
